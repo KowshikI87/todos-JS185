@@ -5,12 +5,13 @@ const session = require("express-session");
 const { body, validationResult } = require("express-validator");
 const TodoList = require("./lib/todolist");
 const Todo = require("./lib/todo");
-const { sortTodoLists, sortTodos } = require("./lib/sort");
+const { sortTodos } = require("./lib/sort");
 const store = require("connect-loki");
-
+const SessionPersistence = require("./lib/session-persistence");
+const SeedData = require("./lib/seed-data"); // Temporary code!
 const app = express();
 const host = "localhost";
-const port = 3001;
+const port = 3000;
 const LokiStore = store(session);
 
 app.set("views", "./views");
@@ -35,18 +36,13 @@ app.use(session({
 
 app.use(flash());
 
-// Set up persistent session data
+// Create a new datastore
 app.use((req, res, next) => {
-  let todoLists = [];
-  if ("todoLists" in req.session) {
-    req.session.todoLists.forEach(todoList => {
-      todoLists.push(TodoList.makeTodoList(todoList));
-    });
-  }
-
-  req.session.todoLists = todoLists;
+  res.locals.store = new SessionPersistence(req.session);
   next();
 });
+
+
 
 // Extract session info
 app.use((req, res, next) => {
@@ -54,12 +50,6 @@ app.use((req, res, next) => {
   delete req.session.flash;
   next();
 });
-
-// Find a todo list with the indicated ID. Returns `undefined` if not found.
-// Note that `todoListId` must be numeric.
-const loadTodoList = (todoListId, todoLists) => {
-  return todoLists.find(todoList => todoList.id === todoListId);
-};
 
 // Find a todo with the indicated ID in the indicated todo list. Returns
 // `undefined` if not found. Note that both `todoListId` and `todoId` must be
@@ -78,8 +68,18 @@ app.get("/", (req, res) => {
 
 // Render the list of todo lists
 app.get("/lists", (req, res) => {
+  let store = res.locals.store;
+  let todoLists = store.sortedTodoLists();
+
+  let todosInfo = todoLists.map(todoList => ({
+    countAllTodos: todoList.todos.length,
+    countDoneTodos: todoList.todos.filter(todo => todo.done).length,
+    isDone: store.isDoneTodoList(todoList),
+  }));
+
   res.render("lists", {
-    todoLists: sortTodoLists(req.session.todoLists),
+    todoLists,
+    todosInfo,
   });
 });
 
@@ -123,13 +123,14 @@ app.post("/lists",
 // Render individual todo list and its todos
 app.get("/lists/:todoListId", (req, res, next) => {
   let todoListId = req.params.todoListId;
-  let todoList = loadTodoList(+todoListId, req.session.todoLists);
+  let todoList = res.locals.store.loadTodoList(+todoListId);
   if (todoList === undefined) {
     next(new Error("Not found."));
   } else {
     res.render("list", {
-      todoList: todoList,
-      todos: sortTodos(todoList),
+      todoList,
+      isDoneTodoList: res.locals.store.isDoneTodoList(todoList),
+      hasUndoneTodos: res.locals.store.hasUndoneTodos(todoList),
     });
   }
 });
@@ -287,6 +288,17 @@ app.post("/lists/:todoListId/edit",
     }
   }
 );
+
+// TEMPORARY CODE: DELETE WHEN DONE
+app.get("/search/:todoListId", (req, res) => {
+  let todoListId = req.params.todoListId;
+  let todoList = res.locals.store.loadTodoList(+todoListId);
+  if (todoList) {
+    res.send(`Found todo list ${todoListId} with title "${todoList.title}"`);
+  } else {
+    res.send(`Did not find todo list ${todoListId}`);
+  }
+});
 
 // Error handler
 app.use((err, req, res, _next) => {

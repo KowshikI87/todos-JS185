@@ -1,1 +1,2 @@
-session-store.db
+**/node_modules
+**/session-store.db
