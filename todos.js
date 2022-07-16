@@ -9,7 +9,6 @@ const { body, validationResult } = require("express-validator");
 const store = require("connect-loki");
 const PgPersistence = require("./lib/pg-persistence");
 const catchError = require("./lib/catch-error");
-const SeedData = require("./lib/seed-data"); // Temporary code!
 const app = express();
 const host = config.HOST;
 const port = config.PORT;
@@ -53,16 +52,6 @@ app.use((req, res, next) => {
   next();
 });
 
-// Find a todo with the indicated ID in the indicated todo list. Returns
-// `undefined` if not found. Note that both `todoListId` and `todoId` must be
-// numeric.
-const loadTodo = (todoListId, todoId, todoLists) => {
-  let todoList = loadTodoList(todoListId, todoLists);
-  if (!todoList) return undefined;
-
-  return todoList.todos.find(todo => todo.id === todoId);
-};
-
 // Detect unauthorized access to routes.
 const requiresAuthentication = (req, res, next) => {
   if (!res.locals.signedIn) {
@@ -71,7 +60,6 @@ const requiresAuthentication = (req, res, next) => {
     next();
   }
 };
-
 
 
 // Redirect start page
